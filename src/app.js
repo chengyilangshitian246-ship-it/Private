@@ -271,7 +271,7 @@ export default function TodoApp() {
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ToDoリスト</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ToDo  リスト</h1>
           <div className="flex gap-2">
             <button
               onClick={() => {
