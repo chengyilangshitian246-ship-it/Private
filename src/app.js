@@ -63,7 +63,7 @@ export default function TodoApp() {
     const diff = state.currentX - state.startX;
 
     // 右方向に50px以上スワイプしたら完了
-    if (diff > 50) {
+    if (diff > 100) {
       if (isStandalone) {
         toggleStandaloneTask(taskId);
       } else {
