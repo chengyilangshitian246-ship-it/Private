@@ -26,6 +26,68 @@ export default function TodoApp() {
   const [taskName, setTaskName] = useState('');
   const [taskDeadline, setTaskDeadline] = useState('');
   const [sortByDeadline, setSortByDeadline] = useState(false);
+  const [swipeState, setSwipeState] = useState({});
+
+  const handleTouchStart = (taskId, e) => {
+    setSwipeState(prev => ({
+      ...prev,
+      [taskId]: {
+        startX: e.touches[0].clientX,
+        currentX: e.touches[0].clientX,
+        isSwiping: false
+      }
+    }));
+  };
+
+  const handleTouchMove = (taskId, e) => {
+    const state = swipeState[taskId];
+    if (!state) return;
+
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - state.startX;
+
+    setSwipeState(prev => ({
+      ...prev,
+      [taskId]: {
+        ...state,
+        currentX: currentX,
+        isSwiping: Math.abs(diff) > 10
+      }
+    }));
+  };
+
+  const handleTouchEnd = (taskId, isStandalone, groupId) => {
+    const state = swipeState[taskId];
+    if (!state) return;
+
+    const diff = state.currentX - state.startX;
+
+    // 右方向に50px以上スワイプしたら完了
+    if (diff > 50) {
+      if (isStandalone) {
+        toggleStandaloneTask(taskId);
+      } else {
+        toggleTask(groupId, taskId);
+      }
+    }
+
+    // スワイプ状態をリセット
+    setSwipeState(prev => {
+      const newState = { ...prev };
+      delete newState[taskId];
+      return newState;
+    });
+  };
+
+  const getSwipeTransform = (taskId) => {
+    const state = swipeState[taskId];
+    if (!state) return 'translateX(0)';
+    
+    const diff = state.currentX - state.startX;
+    // 右方向のスワイプのみ許可
+    const translateX = Math.max(0, Math.min(diff, 100));
+    return `translateX(${translateX}px)`;
+  };
 
   useEffect(() => {
     try {
@@ -268,42 +330,57 @@ export default function TodoApp() {
                   {getSortedTasks(standaloneTasks).map(task => (
                     <div
                       key={task.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border-2 ${
-                        task.completed
-                          ? 'bg-gray-50 border-gray-200'
-                          : 'bg-white border-blue-200'
-                      }`}
+                      className="relative overflow-hidden rounded-lg"
                     >
-                      <button
-                        onClick={() => toggleStandaloneTask(task.id)}
-                        className="flex-shrink-0"
-                      >
-                        {task.completed ? (
-                          <CheckCircle size={24} className="text-green-500" />
-                        ) : (
-                          <Circle size={24} className="text-gray-400 hover:text-blue-500" />
-                        )}
-                      </button>
-
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className={`font-medium ${
-                            task.completed ? 'line-through text-gray-400' : ''
-                          }`}
-                        >
-                          {task.name}
-                        </div>
-                        <div className={`text-sm ${getDeadlineColor(task.deadline)}`}>
-                          期限: {formatDate(task.deadline)} ({task.deadline})
-                        </div>
+                      <div className="absolute inset-0 bg-green-500 flex items-center px-4">
+                        <CheckCircle size={24} className="text-white" />
+                        <span className="text-white font-bold ml-2">完了</span>
                       </div>
-
-                      <button
-                        onClick={() => deleteTask(null, task.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
+                      <div
+                        className={`flex items-center gap-3 p-3 rounded-lg border-2 relative ${
+                          task.completed
+                            ? 'bg-gray-50 border-gray-200'
+                            : 'bg-white border-blue-200'
+                        }`}
+                        style={{
+                          transform: getSwipeTransform(task.id),
+                          transition: swipeState[task.id]?.isSwiping ? 'none' : 'transform 0.3s ease'
+                        }}
+                        onTouchStart={(e) => handleTouchStart(task.id, e)}
+                        onTouchMove={(e) => handleTouchMove(task.id, e)}
+                        onTouchEnd={() => handleTouchEnd(task.id, true, null)}
                       >
-                        <X size={18} />
-                      </button>
+                        <button
+                          onClick={() => toggleStandaloneTask(task.id)}
+                          className="flex-shrink-0"
+                        >
+                          {task.completed ? (
+                            <CheckCircle size={24} className="text-green-500" />
+                          ) : (
+                            <Circle size={24} className="text-gray-400 hover:text-blue-500" />
+                          )}
+                        </button>
+
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={`font-medium ${
+                              task.completed ? 'line-through text-gray-400' : ''
+                            }`}
+                          >
+                            {task.name}
+                          </div>
+                          <div className={`text-sm ${getDeadlineColor(task.deadline)}`}>
+                            期限: {formatDate(task.deadline)} ({task.deadline})
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => deleteTask(null, task.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -377,42 +454,57 @@ export default function TodoApp() {
                       {getSortedTasks(group.tasks).map(task => (
                         <div
                           key={task.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border-2 ${
-                            task.completed
-                              ? 'bg-gray-50 border-gray-200'
-                              : 'bg-white border-purple-200'
-                          }`}
+                          className="relative overflow-hidden rounded-lg"
                         >
-                          <button
-                            onClick={() => toggleTask(group.id, task.id)}
-                            className="flex-shrink-0"
-                          >
-                            {task.completed ? (
-                              <CheckCircle size={24} className="text-green-500" />
-                            ) : (
-                              <Circle size={24} className="text-gray-400 hover:text-purple-500" />
-                            )}
-                          </button>
-
-                          <div className="flex-1 min-w-0">
-                            <div
-                              className={`font-medium ${
-                                task.completed ? 'line-through text-gray-400' : ''
-                              }`}
-                            >
-                              {task.name}
-                            </div>
-                            <div className={`text-sm ${getDeadlineColor(task.deadline)}`}>
-                              期限: {formatDate(task.deadline)} ({task.deadline})
-                            </div>
+                          <div className="absolute inset-0 bg-green-500 flex items-center px-4">
+                            <CheckCircle size={24} className="text-white" />
+                            <span className="text-white font-bold ml-2">完了</span>
                           </div>
-
-                          <button
-                            onClick={() => deleteTask(group.id, task.id)}
-                            className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
+                          <div
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 relative ${
+                              task.completed
+                                ? 'bg-gray-50 border-gray-200'
+                                : 'bg-white border-purple-200'
+                            }`}
+                            style={{
+                              transform: getSwipeTransform(task.id),
+                              transition: swipeState[task.id]?.isSwiping ? 'none' : 'transform 0.3s ease'
+                            }}
+                            onTouchStart={(e) => handleTouchStart(task.id, e)}
+                            onTouchMove={(e) => handleTouchMove(task.id, e)}
+                            onTouchEnd={() => handleTouchEnd(task.id, false, group.id)}
                           >
-                            <X size={18} />
-                          </button>
+                            <button
+                              onClick={() => toggleTask(group.id, task.id)}
+                              className="flex-shrink-0"
+                            >
+                              {task.completed ? (
+                                <CheckCircle size={24} className="text-green-500" />
+                              ) : (
+                                <Circle size={24} className="text-gray-400 hover:text-purple-500" />
+                              )}
+                            </button>
+
+                            <div className="flex-1 min-w-0">
+                              <div
+                                className={`font-medium ${
+                                  task.completed ? 'line-through text-gray-400' : ''
+                                }`}
+                              >
+                                {task.name}
+                              </div>
+                              <div className={`text-sm ${getDeadlineColor(task.deadline)}`}>
+                                期限: {formatDate(task.deadline)} ({task.deadline})
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => deleteTask(group.id, task.id)}
+                              className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
