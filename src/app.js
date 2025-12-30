@@ -99,7 +99,11 @@ export default function TodoApp() {
   };
 
   const toggleTask = (groupId, taskId) => {
-    setGroups(groups.map(g => 
+    const group = groups.find(g => g.id === groupId);
+    const task = group.tasks.find(t => t.id === taskId);
+    
+    // タスクを完了状態に更新
+    const updatedGroups = groups.map(g => 
       g.id === groupId
         ? {
             ...g,
@@ -108,7 +112,18 @@ export default function TodoApp() {
             )
           }
         : g
-    ));
+    );
+    
+    setGroups(updatedGroups);
+    
+    // グループ内の全タスクが完了したかチェック
+    const updatedGroup = updatedGroups.find(g => g.id === groupId);
+    if (updatedGroup.tasks.length > 0 && updatedGroup.tasks.every(t => t.completed)) {
+      // 全タスク完了したらグループごと削除
+      setTimeout(() => {
+        setGroups(prevGroups => prevGroups.filter(g => g.id !== groupId));
+      }, 500);
+    }
   };
 
   const deleteTask = (groupId, taskId) => {
@@ -128,9 +143,17 @@ export default function TodoApp() {
   };
 
   const toggleStandaloneTask = (taskId) => {
-    setStandaloneTasks(standaloneTasks.map(t =>
-      t.id === taskId ? { ...t, completed: !t.completed } : t
-    ));
+    const task = standaloneTasks.find(t => t.id === taskId);
+    
+    if (!task.completed) {
+      // 未完了→完了の場合、すぐに削除
+      setStandaloneTasks(standaloneTasks.filter(t => t.id !== taskId));
+    } else {
+      // 完了→未完了の場合（通常は起こらないが念のため）
+      setStandaloneTasks(standaloneTasks.map(t =>
+        t.id === taskId ? { ...t, completed: !t.completed } : t
+      ));
+    }
   };
 
   const isGroupCompleted = (group) => {
