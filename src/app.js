@@ -10,6 +10,14 @@ export default function TodoApp() {
       return [];
     }
   });
+  const [standaloneTasks, setStandaloneTasks] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem('standaloneTasks');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [expandedGroups, setExpandedGroups] = useState({});
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -26,6 +34,14 @@ export default function TodoApp() {
       console.error('保存エラー:', e);
     }
   }, [groups]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('standaloneTasks', JSON.stringify(standaloneTasks));
+    } catch (e) {
+      console.error('保存エラー:', e);
+    }
+  }, [standaloneTasks]);
 
   const addGroup = () => {
     if (!groupName.trim()) {
@@ -65,11 +81,17 @@ export default function TodoApp() {
       completed: false
     };
 
-    setGroups(groups.map(g => 
-      g.id === selectedGroupId 
-        ? { ...g, tasks: [...g.tasks, newTask] }
-        : g
-    ));
+    if (selectedGroupId === null) {
+      // 単独タスクとして追加
+      setStandaloneTasks([...standaloneTasks, newTask]);
+    } else {
+      // グループ内タスクとして追加
+      setGroups(groups.map(g => 
+        g.id === selectedGroupId 
+          ? { ...g, tasks: [...g.tasks, newTask] }
+          : g
+      ));
+    }
     
     setTaskName('');
     setTaskDeadline('');
@@ -91,12 +113,24 @@ export default function TodoApp() {
 
   const deleteTask = (groupId, taskId) => {
     if (window.confirm('このタスクを削除しますか？')) {
-      setGroups(groups.map(g =>
-        g.id === groupId
-          ? { ...g, tasks: g.tasks.filter(t => t.id !== taskId) }
-          : g
-      ));
+      if (groupId === null) {
+        // 単独タスクの削除
+        setStandaloneTasks(standaloneTasks.filter(t => t.id !== taskId));
+      } else {
+        // グループ内タスクの削除
+        setGroups(groups.map(g =>
+          g.id === groupId
+            ? { ...g, tasks: g.tasks.filter(t => t.id !== taskId) }
+            : g
+        ));
+      }
     }
+  };
+
+  const toggleStandaloneTask = (taskId) => {
+    setStandaloneTasks(standaloneTasks.map(t =>
+      t.id === taskId ? { ...t, completed: !t.completed } : t
+    ));
   };
 
   const isGroupCompleted = (group) => {
@@ -153,13 +187,25 @@ export default function TodoApp() {
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ToDoリスト</h1>
-          <button
-            onClick={() => setShowGroupModal(true)}
-            className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-          >
-            <Plus size={20} />
-            グループ追加
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setSelectedGroupId(null);
+                setShowTaskModal(true);
+              }}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              <Plus size={20} />
+              タスク追加
+            </button>
+            <button
+              onClick={() => setShowGroupModal(true)}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+            >
+              <Plus size={20} />
+              グループ追加
+            </button>
+          </div>
         </div>
 
         <div className="mb-4 bg-white rounded-lg p-3 shadow">
@@ -175,6 +221,73 @@ export default function TodoApp() {
         </div>
 
         <div className="space-y-4">
+          {standaloneTasks.length === 0 && groups.length === 0 && (
+            <div className="bg-white rounded-xl shadow-lg p-8 text-center text-gray-400">
+              タスクまたはグループを追加して管理しましょう
+            </div>
+          )}
+
+          {standaloneTasks.length > 0 && (
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <div className="p-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold">単独タスク</h2>
+                    <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
+                      {standaloneTasks.filter(t => t.completed).length} / {standaloneTasks.length}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4">
+                <div className="space-y-2">
+                  {getSortedTasks(standaloneTasks).map(task => (
+                    <div
+                      key={task.id}
+                      className={`flex items-center gap-3 p-3 rounded-lg border-2 ${
+                        task.completed
+                          ? 'bg-gray-50 border-gray-200'
+                          : 'bg-white border-blue-200'
+                      }`}
+                    >
+                      <button
+                        onClick={() => toggleStandaloneTask(task.id)}
+                        className="flex-shrink-0"
+                      >
+                        {task.completed ? (
+                          <CheckCircle size={24} className="text-green-500" />
+                        ) : (
+                          <Circle size={24} className="text-gray-400 hover:text-blue-500" />
+                        )}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`font-medium ${
+                            task.completed ? 'line-through text-gray-400' : ''
+                          }`}
+                        >
+                          {task.name}
+                        </div>
+                        <div className={`text-sm ${getDeadlineColor(task.deadline)}`}>
+                          期限: {formatDate(task.deadline)} ({task.deadline})
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => deleteTask(null, task.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {groups.length === 0 && (
             <div className="bg-white rounded-xl shadow-lg p-8 text-center text-gray-400">
               グループを追加してタスクを管理しましょう
