@@ -131,16 +131,16 @@ export default function TodoApp() {
       alert('タスク名を入力してください');
       return;
     }
-    if (!taskDeadline) {
-      alert('期限を入力してください');
-      return;
-    }
+    
+    // 期限が入力されていない場合は今日の日付を設定
+    const finalDeadline = taskDeadline || new Date().toISOString().split('T')[0];
     
     const newTask = {
       id: Date.now(),
       name: taskName,
-      deadline: taskDeadline,
-      completed: false
+      deadline: finalDeadline,
+      completed: false,
+      completedAt: null
     };
 
     if (selectedGroupId === null) {
@@ -164,13 +164,15 @@ export default function TodoApp() {
     const group = groups.find(g => g.id === groupId);
     const task = group.tasks.find(t => t.id === taskId);
     
-    // タスクを完了状態に更新
+    // タスクを完了状態に更新（完了時刻を記録）
     const updatedGroups = groups.map(g => 
       g.id === groupId
         ? {
             ...g,
             tasks: g.tasks.map(t =>
-              t.id === taskId ? { ...t, completed: !t.completed } : t
+              t.id === taskId 
+                ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null }
+                : t
             )
           }
         : g
@@ -181,10 +183,10 @@ export default function TodoApp() {
     // グループ内の全タスクが完了したかチェック
     const updatedGroup = updatedGroups.find(g => g.id === groupId);
     if (updatedGroup.tasks.length > 0 && updatedGroup.tasks.every(t => t.completed)) {
-      // 全タスク完了したらグループごと削除
-      setTimeout(() => {
-        setGroups(prevGroups => prevGroups.filter(g => g.id !== groupId));
-      }, 500);
+      // 全タスク完了したらグループに完了時刻を設定
+      setGroups(prevGroups => prevGroups.map(g =>
+        g.id === groupId ? { ...g, completedAt: new Date().toISOString() } : g
+      ));
     }
   };
 
@@ -208,12 +210,14 @@ export default function TodoApp() {
     const task = standaloneTasks.find(t => t.id === taskId);
     
     if (!task.completed) {
-      // 未完了→完了の場合、すぐに削除
-      setStandaloneTasks(standaloneTasks.filter(t => t.id !== taskId));
-    } else {
-      // 完了→未完了の場合（通常は起こらないが念のため）
+      // 未完了→完了の場合、完了時刻を記録
       setStandaloneTasks(standaloneTasks.map(t =>
-        t.id === taskId ? { ...t, completed: !t.completed } : t
+        t.id === taskId ? { ...t, completed: true, completedAt: new Date().toISOString() } : t
+      ));
+    } else {
+      // 完了→未完了の場合
+      setStandaloneTasks(standaloneTasks.map(t =>
+        t.id === taskId ? { ...t, completed: false, completedAt: null } : t
       ));
     }
   };
@@ -267,11 +271,42 @@ export default function TodoApp() {
     return 'text-blue-600';
   };
 
+  const getGroupEarliestDeadline = (group) => {
+    if (group.tasks.length === 0) return null;
+    const deadlines = group.tasks.map(t => new Date(t.deadline));
+    return new Date(Math.min(...deadlines)).toISOString().split('T')[0];
+  };
+
+  const canDeleteCompleted = (completedAt) => {
+    if (!completedAt) return false;
+    const completed = new Date(completedAt);
+    const now = new Date();
+    const diffDays = (now - completed) / (1000 * 60 * 60 * 24);
+    return diffDays >= 2;
+  };
+
+  // 完了から2日経過したタスクを自動削除
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // 単独タスクの削除
+      setStandaloneTasks(prev => 
+        prev.filter(t => !t.completed || !canDeleteCompleted(t.completedAt))
+      );
+      
+      // グループの削除
+      setGroups(prev =>
+        prev.filter(g => !g.completedAt || !canDeleteCompleted(g.completedAt))
+      );
+    }, 60000); // 1分ごとにチェック
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ToDo  リスト</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">ToDoリスト</h1>
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -378,7 +413,7 @@ export default function TodoApp() {
                           onClick={() => deleteTask(null, task.id)}
                           className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
                         >
-                          <X size={18} />
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </div>
@@ -419,9 +454,16 @@ export default function TodoApp() {
                       <h2 className="text-xl font-bold">{group.name}</h2>
                     </div>
                     
-                    <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
-                      {group.tasks.filter(t => t.completed).length} / {group.tasks.length}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
+                        {group.tasks.filter(t => t.completed).length} / {group.tasks.length}
+                      </span>
+                      {getGroupEarliestDeadline(group) && (
+                        <span className="text-xs bg-white bg-opacity-20 px-2 py-1 rounded">
+                          期限: {formatDate(getGroupEarliestDeadline(group))}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -502,7 +544,7 @@ export default function TodoApp() {
                               onClick={() => deleteTask(group.id, task.id)}
                               className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg flex-shrink-0"
                             >
-                              <X size={18} />
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </div>
@@ -576,7 +618,7 @@ export default function TodoApp() {
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  期限
+                  期限（未入力の場合は今日）
                 </label>
                 <input
                   type="date"
